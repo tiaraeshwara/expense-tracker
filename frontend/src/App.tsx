@@ -11,14 +11,36 @@ interface Summary {
 
 const API = "/api";
 
+const CATEGORIES = [
+  "Groceries",
+  "Eating out",
+  "Transport",
+  "Subscriptions",
+  "Utilities",
+  "Shopping",
+  "Uncategorized",
+];
+
 function formatLKR(n: number) {
   return `Rs. ${Math.round(n).toLocaleString()}`;
+}
+
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 export default function App() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [uploading, setUploading] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
+
+  const [manualDate, setManualDate] = useState(todayISO());
+  const [manualDescription, setManualDescription] = useState("");
+  const [manualAmount, setManualAmount] = useState("");
+  const [manualType, setManualType] = useState<"expense" | "income">("expense");
+  const [manualCategory, setManualCategory] = useState(CATEGORIES[0]);
+  const [savingManual, setSavingManual] = useState(false);
+  const [manualMsg, setManualMsg] = useState("");
 
   const loadSummary = async () => {
     const res = await fetch(`${API}/dashboard/summary`);
@@ -59,6 +81,44 @@ export default function App() {
     }
   };
 
+  const handleManualSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const parsedAmount = parseFloat(manualAmount);
+    if (!manualDescription.trim() || isNaN(parsedAmount) || parsedAmount === 0) {
+      setManualMsg("Enter a description and a non-zero amount.");
+      return;
+    }
+
+    setSavingManual(true);
+    setManualMsg("");
+    try {
+      const signedAmount = manualType === "expense" ? -Math.abs(parsedAmount) : Math.abs(parsedAmount);
+      const res = await fetch(`${API}/transactions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: manualDate,
+          description: manualDescription.trim(),
+          amount: signedAmount,
+          category: manualType === "income" ? "Income" : manualCategory,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setManualMsg("Added.");
+        setManualDescription("");
+        setManualAmount("");
+        await loadSummary();
+      } else {
+        setManualMsg(data.error || "Could not add transaction.");
+      }
+    } catch {
+      setManualMsg("Could not reach the server. Is the backend running?");
+    } finally {
+      setSavingManual(false);
+    }
+  };
+
   const chartData = summary
     ? Object.entries(summary.byCategory)
         .sort((a, b) => b[1] - a[1])
@@ -95,6 +155,52 @@ export default function App() {
           </span>
         </div>
         {statusMsg && <p className="status-msg">{statusMsg}</p>}
+      </div>
+
+      <div className="card">
+        <div className="stat-label" style={{ marginBottom: 12 }}>
+          Add an expense or income manually
+        </div>
+        <form className="manual-form" onSubmit={handleManualSubmit}>
+          <input
+            type="date"
+            value={manualDate}
+            onChange={(e) => setManualDate(e.target.value)}
+            required
+          />
+          <input
+            type="text"
+            placeholder="Description (e.g. Lunch with friends)"
+            value={manualDescription}
+            onChange={(e) => setManualDescription(e.target.value)}
+            required
+          />
+          <input
+            type="number"
+            step="0.01"
+            placeholder="Amount"
+            value={manualAmount}
+            onChange={(e) => setManualAmount(e.target.value)}
+            required
+          />
+          <select value={manualType} onChange={(e) => setManualType(e.target.value as "expense" | "income")}>
+            <option value="expense">Expense</option>
+            <option value="income">Income</option>
+          </select>
+          {manualType === "expense" && (
+            <select value={manualCategory} onChange={(e) => setManualCategory(e.target.value)}>
+              {CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          )}
+          <button type="submit" disabled={savingManual}>
+            {savingManual ? "Adding..." : "Add"}
+          </button>
+        </form>
+        {manualMsg && <p className="status-msg">{manualMsg}</p>}
       </div>
 
       {summary && (
