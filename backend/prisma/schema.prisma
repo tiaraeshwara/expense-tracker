@@ -1,0 +1,33 @@
+// Prisma schema for the expense tracker.
+// Defaults to SQLite so you can run this immediately with zero setup.
+// To switch to Postgres later: change provider to "postgresql" and
+// set DATABASE_URL in .env to your Postgres connection string.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Transaction {
+  id          Int      @id @default(autoincrement())
+  date        DateTime
+  description String
+  amount      Float // negative = expense, positive = income
+  category    String   @default("Uncategorized")
+  needOrWant  String? // "need" | "want" | null (unset)
+  source      String   @default("manual") // "csv-upload" | "manual"
+  createdAt   DateTime @default(now())
+
+  @@index([date])
+  @@index([category])
+}
+
+model Budget {
+  id       Int    @id @default(autoincrement())
+  category String @unique
+  monthlyLimit Float
+}
